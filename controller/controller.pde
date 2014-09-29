@@ -8,20 +8,20 @@ import java.io.FileOutputStream;
 
 
 public class ScriptUnit {
-	final int numOfServo = servoPin.length;
 	public int []servoAngle;
-	public int waitingNumOfFrame;
+	public int numOfFrame;
 
 	public ScriptUnit() {
 		servoAngle = new int[numOfServo];
 		for(int angle : servoAngle) {
 			angle = 0;
 		}
-		waitingNumOfFrame = 0;
+		numOfFrame = 0;
 	}
 
 }
 
+/*
 public class ServoTask extends TimerTask {
 	
 	private int []mServoAngle;
@@ -39,37 +39,42 @@ public class ServoTask extends TimerTask {
 		for(int i = 0;i < numOfServos;i++) {
 			mArduino.servoWrite(servoPin[i],mServoAngle[i]);
 		}
+        //println(mServoAngle[0] + " " + mServoAngle[1] + " " + mServoAngle[2]);
 	}
 
 }
+*/
 
 Arduino arduino;
 final static int []servoPin = new int[]{3,5,9};
 int []servoAngle = new int[servoPin.length];
+final int numOfServo = servoPin.length;
 final int inputStrBufferSize = 15;
-StringBuffer inputStrBuffer = new StringBuffer(inputStrBufferSize);
+StringBuffer inputStrBuffer = null;
 
 String currentScriptName = null;
 final String scriptNameExtension = "lampscript";
 File currentScriptFile = null;
 ArrayList<ScriptUnit> currentScript;
+final int initialAngle = 90;
 
 String sketchAbsPath;
+//Timer timer;
 
 void setup() {
 	//println("pwd:" + System.getProperty("user.dir"));
 	sketchAbsPath = sketchPath("");
 	//println("sketch path:" + sketchAbsPath);
-	//println(Arduino.list());
+	println(Arduino.list());
 	arduino = new Arduino(this,"/dev/tty.usbmodem1421",57600);
-	int numOfServo = servoPin.length;
 	
 	for(int i = 0;i < numOfServo;i++) {
-		servoAngle[i] = 0;
+		servoAngle[i] = initialAngle;
 		arduino.pinMode(servoPin[i],Arduino.SERVO);
 		arduino.servoWrite(servoPin[i],servoAngle[i]);
 	}
 
+	inputStrBuffer = new StringBuffer(inputStrBufferSize);
 }
 
 boolean recordScriptFlag = false;
@@ -81,44 +86,6 @@ boolean saveScriptFlag = false;
 boolean playScriptFlag = false;
 
 void draw() {
-	/*
-	int c;
-	if(recordScriptFlag) { //start to read an number from console and use it as frame number between current frame and next frame
-		int bufferIndex = 0;
-		try {
-			println("start to read number");
-			while((c = System.in.read()) > 0) {
-				println("get char!");
-				if(Character.isDigit(c)) {
-					if(bufferIndex < sizeOfinputStrBuffer-1) {
-						inputStrBuffer[bufferIndex] = (char) c;
-						bufferIndex++;				
-					}
-				}
-				if(c == ESC_Value) {
-					recordScriptFlag = false;
-					break;
-				}
-				else if(c == DELETE_Value) {
-					if(bufferIndex > 0) {
-						bufferIndex--;
-					}
-				}
-				else if(c == ENTER_Value || c == 10) {
-					inputStrBuffer[bufferIndex] = 0;
-					println(Integer.valueOf(new String(inputStrBuffer)));
-					recordScriptFlag = false;
-					break;
-				}
-			}
-
-		}
-		catch(Exception e) {
-			println(e.getMessage());
-		}
-		println("end");
-	}
-	*/
 }
 
 final int largeAngle = 10;
@@ -154,7 +121,6 @@ boolean openFile(String fileName,FileMode mode) { //open file from current direc
 	}
 	catch(Exception e) {
 		println(e.getMessage());
-		println("here1");
 		return false;
 	}
 
@@ -181,10 +147,14 @@ void printlnInFile(String data) {
 		}
 	}
 
-	printWriter.println(data);
-	printWriter.close();
-
-	println("successfully append data:" + data);
+	try {
+		printWriter.println(data);
+		printWriter.close();
+		println("successfully append data:" + data);
+	}
+	catch(Exception e) {
+		println(e.getMessage());
+	}
 
 	printWriter = null;
 	return;
@@ -224,7 +194,7 @@ ArrayList<ScriptUnit> readWholeScriptFromFile() {
 					scriptUnit.servoAngle[i] = Integer.parseInt(parsedData[i]);
 				}
 				else {
-					scriptUnit.waitingNumOfFrame = Integer.parseInt(parsedData[i]);
+					scriptUnit.numOfFrame = Integer.parseInt(parsedData[i]);
 				}
 			}
 			scriptUnitList.add(scriptUnit);
@@ -255,11 +225,20 @@ final int [][]servoControlKey = new int[][]{
 	{KeyEvent.VK_LEFT,KeyEvent.VK_RIGHT,KeyEvent.VK_J,KeyEvent.VK_L}
 };
 
-final float numMillisecondsPerFrame = (float)1000/12.0;
+final long numMillisecondsPerFrame = 100;
+final int numOfServos = servoPin.length;
+int []currentAngle = new int[numOfServos];
+int []toAngle = new int[numOfServos];
+
 
 void keyPressed() {
-	
-	if(keyCode == KeyEvent.VK_R) {
+	if(keyCode == KeyEvent.VK_Q){
+		for(int i = 0;i < numOfServo;i++) {
+			servoAngle[i] = initialAngle;
+			arduino.servoWrite(servoPin[i],servoAngle[i]);
+		}
+    }
+	else if(keyCode == KeyEvent.VK_R) {
 		recordScriptFlag = !recordScriptFlag;
 		if(recordScriptFlag) {
 			println("enter an number as frame value between current and next frame:");
@@ -315,36 +294,50 @@ void keyPressed() {
 	}
 */
 	else if(keyCode == KeyEvent.VK_P) { //play and stop
-		playScriptFlag = !playScriptFlag;
-		if(playScriptFlag) {
-			if(currentScriptName != null) {
-				println("start playing current script name:" + currentScriptName);
-			}
-			else {
-				println("script name is null");
-				return;
-			}
-
-			if(currentScript != null) {
-				int numOfSteps = currentScript.size();
-				Timer timer = new Timer();
-				for(int i = 0;(i < numOfSteps) && playScriptFlag;i++) {
-					ScriptUnit scriptUnit = currentScript.get(i);
-					ServoTask task = new ServoTask(scriptUnit.servoAngle, arduino);
-					timer.schedule(task, (long)(scriptUnit.waitingNumOfFrame * numMillisecondsPerFrame));
-				}
-			}
-			else {
-				println("current script didn't exist,you need to load certain script file");
-			}
-
-			playScriptFlag = false;
-			println("script player timer setting end");
-
+		
+		if(currentScriptName != null) {
+			println("start playing current script name:" + currentScriptName);
 		}
 		else {
-			println("stop playing current script");
+			println("script name is null");
+			return;
 		}
+
+		if(currentScript != null) {
+
+			for(int i = 0;i < numOfServos;i++) {
+				currentAngle[i] = initialAngle;
+				arduino.servoWrite(servoPin[i],currentAngle[i]);
+			}
+			int currentTimeInMillis = millis();
+			int numOfSteps = currentScript.size();
+			for(int i = 0;i < numOfSteps;i++) {
+				ScriptUnit scriptUnit = currentScript.get(i);
+				for(int j = 1;j <= scriptUnit.numOfFrame;j++) {
+					for(int k = 0;k < numOfServos;k++) {
+						toAngle[k] = easingInOutExpo(j,currentAngle[k],scriptUnit.servoAngle[k]-currentAngle[k],scriptUnit.numOfFrame);				
+					}
+					while(millis() - currentTimeInMillis < numMillisecondsPerFrame);
+					for(int k = 0;k < numOfServos;k++) {
+						print(toAngle[k] + " ");
+						arduino.servoWrite(servoPin[k],toAngle[k]);
+					}
+					println("");
+					currentTimeInMillis = millis();
+				}
+				for(int j = 0;j < numOfServos;j++) {
+					currentAngle[j] = scriptUnit.servoAngle[j];
+				}
+               		
+			}
+		}
+		else {
+			println("current script didn't exist,you need to load certain script file");
+		}
+
+		println("script player timer setting end");
+
+		
 	}
 	else if(keyCode == KeyEvent.VK_F) {
 		println("current script name:" + currentScriptName);
@@ -359,7 +352,7 @@ void keyPressed() {
 				}
 				
 				if(inputStrBuffer.length() > 0) {
-					println("current value:" + Integer.parseInt(inputStrBuffer.toString()));
+					println("current value:" + inputStrBuffer.toString());
 				}
 				else {
 					println("empty string");
@@ -431,7 +424,7 @@ void keyPressed() {
 				}
 				
 				if(inputStrBuffer.length() > 0) {
-					println("current value:" + Integer.parseInt(inputStrBuffer.toString()));
+					println("current value:" + inputStrBuffer.toString());
 				}
 				else {
 					println("empty string");
@@ -483,4 +476,11 @@ void keyPressed() {
 		}
 	}
 
+}
+
+private int easingInOutExpo(int frameOrder, int start, int delta, int totalFrame) {
+    if (frameOrder == 0) return start;
+    if (frameOrder == totalFrame) return (start + delta);
+    if ((frameOrder /= totalFrame/2) < 1) return (int)(delta/2 * (float)Math.pow(2, 10 * (frameOrder - 1)) + start);
+    return (int)(delta/2 * (-(float)Math.pow(2, -10 * --frameOrder) + 2) + start);
 }
